@@ -34,6 +34,8 @@
   textarea { min-height: 60px; resize: vertical; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--text); }
   .check input { width: auto; margin: 0; }
+  details.sec { margin-top: 12px; }
+  details.sec > summary { padding: 12px 14px; border-radius: 10px; background: var(--card); font-weight: 600; cursor: pointer; }
   .total { margin-top: 10px; font-size: 14px; color: var(--hint); }
   .send { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 10px;
     background: var(--accent); color: var(--accent-text); font-size: 17px; font-weight: 600; }
@@ -337,6 +339,9 @@ function opLine(x) {
 }
 
 let lastReport = null;
+// Разделы отчёта свёрнуты по умолчанию; раскрытые остаются раскрытыми при перестройке отчёта (слово владельца 14.10).
+const openSecs = new Set();
+const sec = (k, title, body) => '<details class="sec" data-k="' + k + '"' + (openSecs.has(k) ? ' open' : '') + '><summary>' + esc(title) + '</summary>' + body + '</details>';
 function renderReport(r) {
   lastReport = r; $('r-emptyBox').hidden = false;
   // Пустая позиция — 0 или «не внесён»; без галочки «Показывать пустые» такие строки и колонки скрыты (слово владельца 14.10).
@@ -354,47 +359,48 @@ function renderReport(r) {
         (!good && x.message ? '<div class="why">' + esc(x.message) + '</div>' : '') + '</div>';
     });
   });
-  $('r-ops').innerHTML = h;
+  $('r-ops').innerHTML = sec('ops', 'Операции за период · ' + r.ops.length, h);
   const val = (v, unit) => v === null ? '<span class="sub">не внесён</span>' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + ' ' + unit + '</span>';
   const cell = v => '<td class="n">' + (v === null ? '—' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + '</span>') + '</td>';
-  let b = '<div class="step" style="margin-top:20px">Остатки на конец ' + ruDay(r.to) + '</div><table>';
+  let t = '<table>';
   // Оптоволокно показываем в километрах (слово владельца 14.10), вводится по-прежнему в метрах.
-  r.assets.filter(a => all || filled(a.value)).forEach(a => { const km = a.unit === 'м' && a.value !== null; b += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>'; });
-  b += '</table>';
+  r.assets.filter(a => all || filled(a.value)).forEach(a => { const km = a.unit === 'м' && a.value !== null; t += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>'; });
+  let b = sec('bal', 'Остатки на конец ' + ruDay(r.to), t + '</table>');
   // Группы по метражу: готовые изделия (первые две) и катушки до сборки (остальные), по 8 метражей в каждой.
-  [['Готовые по метражу, шт.', [0, 1]], ['Катушки по метражу, шт.', r.groups.map((g, k) => k).slice(2)]].forEach(([title, ks]) => {
+  [['Готовые по метражу, шт.', [0, 1]], ['Катушки по метражу, шт.', r.groups.map((g, k) => k).slice(2)]].forEach(([title, ks], n) => {
     ks = ks.filter(k => all || r.lengths.some((l, i) => filled(r.products[k * 8 + i])));
     if (!ks.length) return;
-    b += '<div class="group">' + title + '</div><table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(r.groups[k]) + '</td>').join('') + '</tr>';
-    r.lengths.forEach((l, i) => (all || ks.some(k => filled(r.products[k * 8 + i]))) && (b += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => cell(r.products[k * 8 + i])).join('') + '</tr>'));
-    b += '</table>';
+    t = '<table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(r.groups[k]) + '</td>').join('') + '</tr>';
+    r.lengths.forEach((l, i) => (all || ks.some(k => filled(r.products[k * 8 + i]))) && (t += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => cell(r.products[k * 8 + i])).join('') + '</tr>'));
+    b += sec('len' + n, title, t + '</table>');
   });
-  b += '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.' + (all ? '' : ' Нули и невнесённые скрыты.') + '</div>';
   // Движение за период и выпуск за период — отдельные разделы в самом низу (слово владельца 14.10).
   if (r.movement) {
     const km = a => a.unit === 'м', put = (a, v) => v === null ? '—' : fmt(km(a) ? v / 1000 : v);
-    b += '<div class="step" style="margin-top:24px">Движение за период</div><table><tr><td class="n sub">Начало</td><td class="n sub">Приход</td><td class="n sub">Расход</td><td class="n sub">Конец</td></tr>';
+    t = '<table><tr><td class="n sub">Начало</td><td class="n sub">Приход</td><td class="n sub">Расход</td><td class="n sub">Конец</td></tr>';
     r.assets.forEach((a, i) => {
       const inc = r.movement.in[i], out = r.movement.out[i];
       if (!all && !inc && !out) return;
       // Название — отдельной строкой над числами: в одну строку с ними таблица шире экрана телефона.
-      b += '<tr><td colspan="4" style="border:0;padding-bottom:0">' + esc(a.name) + (km(a) ? ', км' : ', шт.') + '</td></tr><tr><td class="n">' + put(a, a.value === null ? null : a.value - inc + out) + '</td><td class="n">' + put(a, inc) + '</td><td class="n">' + put(a, out) + '</td><td class="n">' + put(a, a.value) + '</td></tr>';
+      t += '<tr><td colspan="4" style="border:0;padding-bottom:0">' + esc(a.name) + (km(a) ? ', км' : ', шт.') + '</td></tr><tr><td class="n">' + put(a, a.value === null ? null : a.value - inc + out) + '</td><td class="n">' + put(a, inc) + '</td><td class="n">' + put(a, out) + '</td><td class="n">' + put(a, a.value) + '</td></tr>';
     });
-    b += '</table>';
-    if (!all && r.assets.every((a, i) => !r.movement.in[i] && !r.movement.out[i])) b += '<div class="total">За период движения нет.</div>';
+    t += '</table>';
+    if (!all && r.assets.every((a, i) => !r.movement.in[i] && !r.movement.out[i])) t = '<div class="total">За период движения нет.</div>';
+    b += sec('move', 'Движение за период', t);
   }
   if (r.output) {
     const o = r.output, ks = o.ops.map((x, k) => k).filter(k => all || o.qty[k].some(Boolean));
-    b += '<div class="step" style="margin-top:24px">Выпуск за период, шт.</div>';
-    if (!ks.length) b += '<div class="total">За период выпуска нет.</div>';
+    if (!ks.length) t = '<div class="total">За период выпуска нет.</div>';
     else {
-      b += '<table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(o.ops[k]).replace(/([а-яё]{4})(?=[а-яё]{3})/gi, '$1&shy;') + '</td>').join('') + '</tr>';
-      r.lengths.forEach((l, i) => (all || ks.some(k => o.qty[k][i])) && (b += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => '<td class="n">' + fmt(o.qty[k][i]) + '</td>').join('') + '</tr>'));
-      b += '<tr><td><b>Итого</b></td>' + ks.map(k => '<td class="n"><b>' + fmt(o.qty[k].reduce((x, y) => x + y, 0)) + '</b></td>').join('') + '</tr></table>';
+      t = '<table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(o.ops[k]).replace(/([а-яё]{4})(?=[а-яё]{3})/gi, '$1&shy;') + '</td>').join('') + '</tr>';
+      r.lengths.forEach((l, i) => (all || ks.some(k => o.qty[k][i])) && (t += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => '<td class="n">' + fmt(o.qty[k][i]) + '</td>').join('') + '</tr>'));
+      t += '<tr><td><b>Итого</b></td>' + ks.map(k => '<td class="n"><b>' + fmt(o.qty[k].reduce((x, y) => x + y, 0)) + '</b></td>').join('') + '</tr></table>';
     }
-    if (all || o.metres) b += '<div class="total">Оптоволокна на намотку и перемотку: ' + fmt(o.metres / 1000) + ' км.</div>';
+    if (all || o.metres) t += '<div class="total">Оптоволокна на намотку и перемотку: ' + fmt(o.metres / 1000) + ' км.</div>';
+    b += sec('out', 'Выпуск за период, шт.', t);
   }
-  $('r-bal').innerHTML = b;
+  $('r-bal').innerHTML = b + '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.' + (all ? '' : ' Нули и невнесённые скрыты.') + '</div>';
+  document.querySelectorAll('#repBox details.sec').forEach(d => d.ontoggle = () => d.open ? openSecs.add(d.dataset.k) : openSecs.delete(d.dataset.k));
 }
 
 async function loadReport() {
