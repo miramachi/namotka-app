@@ -21,11 +21,13 @@
     font: 16px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
   h1 { font-size: 20px; margin: 0 0 2px; }
   .who { color: var(--hint); font-size: 14px; margin-bottom: 16px; }
+  .step { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--hint); margin: 4px 0 8px; }
+  .docs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
   .ops { display: grid; gap: 8px; margin-bottom: 16px; }
-  .ops button { text-align: left; padding: 12px 14px; border-radius: 10px; border: 2px solid transparent;
+  .docs button, .ops button { text-align: left; padding: 12px 14px; border-radius: 10px; border: 2px solid transparent;
     background: var(--card); color: var(--text); font-size: 16px; }
-  .ops button.on { border-color: var(--accent); }
-  .ops small { display: block; color: var(--hint); font-size: 13px; }
+  .docs button.on, .ops button.on { border-color: var(--accent); }
   label { display: block; margin: 12px 0 4px; font-size: 14px; color: var(--hint); }
   input, select, textarea { width: 100%; padding: 12px; border-radius: 10px; border: 0;
     background: var(--card); color: var(--text); font-size: 16px; }
@@ -45,8 +47,14 @@
 <div class="who" id="who">Загрузка…</div>
 
 <div id="form" hidden>
-  <div class="ops" id="ops"></div>
+  <div class="step">Документ</div>
+  <div class="docs" id="docs"></div>
+  <div id="opsBox" hidden>
+    <div class="step">Операция</div>
+    <div class="ops" id="ops"></div>
+  </div>
   <div id="fields" hidden>
+    <div class="step">Реквизиты</div>
     <label for="date">Дата</label>
     <input id="date" type="date" min="2026-10-15">
     <div id="f-metres"><label for="metres">Оптоволокно, м</label><input id="metres" inputmode="decimal"></div>
@@ -78,6 +86,18 @@ async function api(body) {
   const r = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ initData: tg ? tg.initData : '' }, body)) });
   if (!r.ok) throw new Error('Сервер ответил ' + r.status);
   return r.json();
+}
+
+function pickDoc(doc, btn) {
+  rule = null;
+  document.querySelectorAll('.docs button').forEach(b => b.classList.toggle('on', b === btn));
+  $('ops').innerHTML = '';
+  rules.filter(x => x.doc === doc).forEach(x => {
+    const b = document.createElement('button');
+    b.textContent = x.op;
+    b.onclick = () => pick(x, b); $('ops').append(b);
+  });
+  $('opsBox').hidden = false; $('fields').hidden = true; show('');
 }
 
 function pick(r, btn) {
@@ -133,11 +153,11 @@ async function start() {
     rules = r.rules;
     $('productLength').innerHTML = r.lengths.map(l => '<option value="' + l + '">Катушка ОВ ' + l.toLocaleString('ru-RU') + ' м</option>').join('');
     $('lengths').innerHTML = r.lengths.map(l => '<option value="' + l + '">').join('');
-    $('ops').innerHTML = '';
-    rules.forEach(x => {
+    $('docs').innerHTML = '';
+    rules.map(x => x.doc).filter((d, i, all) => all.indexOf(d) === i).forEach(doc => {
       const b = document.createElement('button');
-      b.innerHTML = '<small></small>'; b.firstChild.textContent = x.doc; b.append(x.op);
-      b.onclick = () => pick(x, b); $('ops').append(b);
+      b.textContent = doc;
+      b.onclick = () => pickDoc(doc, b); $('docs').append(b);
     });
     $('date').value = today();
     $('form').hidden = false;
