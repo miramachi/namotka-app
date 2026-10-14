@@ -168,7 +168,7 @@ function checkOp(op) {
 function recalc() {
   if (rule && rule.mode === 'winding') {
     const m = num($('qty').value) * num($('length').value);
-    $('total').textContent = m > 0 ? 'Спишется оптоволокна: ' + m.toLocaleString('ru-RU') + ' м' : '';
+    $('total').textContent = m > 0 ? 'Спишется оптоволокна: ' + fmt(m / 1000) + ' км' : '';
   } else $('total').textContent = '';
 }
 
@@ -184,7 +184,7 @@ function loadPending() {
 }
 function opLabel(op) {
   return op.doc + ' / ' + op.op + ', ' + String(op.date).split('-').reverse().join('.') +
-    (op.metres ? ', ' + op.metres + ' м' : ', ' + op.qty + ' шт.') + (op.length ? ' по ' + op.length + ' м' : '') +
+    (op.metres ? ', ' + fmt(op.metres / 1000) + ' км' : ', ' + op.qty + ' шт.') + (op.length ? ' по ' + op.length + ' м' : '') +
     (op.productLength ? ', изделие ' + op.productLength + ' м' : '');
 }
 
@@ -328,7 +328,7 @@ function opLine(x) {
   if (has(x.qty)) parts.push(fmt(x.qty) + ' шт.');
   if (has(x.product)) parts.push('изделие ' + fmt(x.product) + ' м');
   else if (has(x.length)) parts.push('катушка ' + fmt(x.length) + ' м');
-  if (Number(x.metres)) parts.push('оптоволокно ' + fmt(x.metres) + ' м');
+  if (Number(x.metres)) parts.push('оптоволокно ' + fmt(x.metres / 1000) + ' км');
   if (x.note) parts.push(x.note);
   return parts.join(' · ');
 }
@@ -351,7 +351,8 @@ function renderReport(r) {
   const val = (v, unit) => v === null ? '<span class="sub">не внесён</span>' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + ' ' + unit + '</span>';
   const cell = v => '<td class="n">' + (v === null ? '—' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + '</span>') + '</td>';
   let b = '<div class="step" style="margin-top:20px">Остатки на конец ' + ruDay(r.to) + '</div><table>';
-  r.assets.forEach(a => b += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(a.value, a.unit) + '</td></tr>');
+  // Оптоволокно показываем в километрах (слово владельца 14.10), вводится по-прежнему в метрах.
+  r.assets.forEach(a => { const km = a.unit === 'м' && a.value !== null; b += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>'; });
   b += '</table>';
   // Группы по метражу: готовые изделия (первые две) и катушки до сборки (остальные), по 8 метражей в каждой.
   [['Готовые по метражу, шт.', [0, 1]], ['Катушки по метражу, шт.', r.groups.map((g, k) => k).slice(2)]].forEach(([title, ks]) => {
