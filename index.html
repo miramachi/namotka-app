@@ -85,6 +85,7 @@
   <div id="openingBox" hidden>
     <div class="step">Остатки на начало учёта</div>
     <div class="total">По физическому пересчёту. Пусто — не посчитано, 0 — нет. В журнал операций не пишется.</div>
+    <div><label for="op-date">Дата пересчёта</label><input id="op-date" type="date"></div>
     <div id="op-fibre"></div>
     <div id="op-groups"></div>
     <div class="total" id="op-entered"></div>
@@ -240,6 +241,7 @@ async function pickOpening(btn) {
   rule = null;
   document.querySelectorAll('.docs button').forEach(b => b.classList.toggle('on', b === btn));
   $('opsBox').hidden = true; $('fields').hidden = true; $('openingBox').hidden = true; show('Загружаю остатки…');
+  $('op-date').max = today(); if (!$('op-date').value) $('op-date').value = today();
   try {
     const r = await api({ action: 'opening' });
     if (!r.ok) { show(r.error, 'bad'); return; }
@@ -269,7 +271,7 @@ function renderOpening(r) {
 }
 
 function opValues() {
-  return { fibre: $('of').value.trim(), products: Array.from({ length: opGroups.length * 8 }, (_, k) => $('op' + k).value.trim()) };
+  return { date: $('op-date').value, fibre: $('of').value.trim(), products: Array.from({ length: opGroups.length * 8 }, (_, k) => $('op' + k).value.trim()) };
 }
 
 function recalcOpening() {
@@ -283,6 +285,8 @@ function recalcOpening() {
 }
 
 function checkOpening(v) {
+  if (!v.date) return 'Укажите дату пересчёта.';
+  if (v.date > today()) return 'Дата пересчёта не может быть позже сегодняшней.';
   if ([v.fibre].concat(v.products).some(x => /[.,]/.test(x))) return 'Пишите числа цифрами без точек и запятых, например 10000.';
   const bad = (x, whole) => x !== '' && !(num(x) >= 0 && (!whole || Number.isInteger(num(x))));
   if (bad(v.fibre, true)) return 'Оптоволокно: целое число метров от 0 или пусто.';
