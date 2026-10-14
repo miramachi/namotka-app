@@ -32,6 +32,8 @@
   input, select, textarea { width: 100%; padding: 12px; border-radius: 10px; border: 0;
     background: var(--card); color: var(--text); font-size: 16px; }
   textarea { min-height: 60px; resize: vertical; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--text); }
+  .check input { width: auto; margin: 0; }
   .total { margin-top: 10px; font-size: 14px; color: var(--hint); }
   .send { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 10px;
     background: var(--accent); color: var(--accent-text); font-size: 17px; font-weight: 600; }
@@ -98,6 +100,7 @@
     <div><label for="r-from">С</label><input id="r-from" type="date" min="2026-10-15"></div>
     <div><label for="r-to">По</label><input id="r-to" type="date" min="2026-10-15"></div>
   </div>
+  <label class="check"><input type="checkbox" id="r-empty"> Показывать пустые</label>
   <button class="send" id="r-show">Показать</button>
   <div id="r-ops"></div>
   <div id="r-bal"></div>
@@ -333,7 +336,11 @@ function opLine(x) {
   return parts.join(' · ');
 }
 
+let lastReport = null;
 function renderReport(r) {
+  lastReport = r;
+  // Пустая позиция — 0 или «не внесён»; без галочки «Показывать пустые» такие строки и колонки скрыты (слово владельца 14.10).
+  const all = $('r-empty').checked, filled = v => v !== null && v !== 0;
   const days = {};
   r.ops.forEach(x => (days[x.day] = days[x.day] || []).push(x));
   let h = r.ops.length ? '' : '<div class="total">За выбранные дни операций нет.</div>';
@@ -352,15 +359,17 @@ function renderReport(r) {
   const cell = v => '<td class="n">' + (v === null ? '—' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + '</span>') + '</td>';
   let b = '<div class="step" style="margin-top:20px">Остатки на конец ' + ruDay(r.to) + '</div><table>';
   // Оптоволокно показываем в километрах (слово владельца 14.10), вводится по-прежнему в метрах.
-  r.assets.forEach(a => { const km = a.unit === 'м' && a.value !== null; b += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>'; });
+  r.assets.filter(a => all || filled(a.value)).forEach(a => { const km = a.unit === 'м' && a.value !== null; b += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>'; });
   b += '</table>';
   // Группы по метражу: готовые изделия (первые две) и катушки до сборки (остальные), по 8 метражей в каждой.
   [['Готовые по метражу, шт.', [0, 1]], ['Катушки по метражу, шт.', r.groups.map((g, k) => k).slice(2)]].forEach(([title, ks]) => {
+    ks = ks.filter(k => all || r.lengths.some((l, i) => filled(r.products[k * 8 + i])));
+    if (!ks.length) return;
     b += '<div class="group">' + title + '</div><table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(r.groups[k]) + '</td>').join('') + '</tr>';
-    r.lengths.forEach((l, i) => b += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => cell(r.products[k * 8 + i])).join('') + '</tr>');
+    r.lengths.forEach((l, i) => (all || ks.some(k => filled(r.products[k * 8 + i]))) && (b += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => cell(r.products[k * 8 + i])).join('') + '</tr>'));
     b += '</table>';
   });
-  $('r-bal').innerHTML = b + '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.</div>';
+  $('r-bal').innerHTML = b + '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.' + (all ? '' : ' Нули и невнесённые скрыты.') + '</div>';
 }
 
 async function loadReport() {
@@ -413,6 +422,7 @@ $('op-save').onclick = saveOpening;
 $('tab-docs').onclick = () => tab(false);
 $('tab-rep').onclick = () => tab(true);
 $('r-show').onclick = loadReport;
+$('r-empty').onchange = () => lastReport && renderReport(lastReport);
 $('openingBox').addEventListener('input', recalcOpening);
 start();
 </script>
