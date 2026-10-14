@@ -73,7 +73,7 @@
     <div class="step">Реквизиты</div>
     <label for="date">Дата</label>
     <input id="date" type="date" min="2026-10-15">
-    <div id="f-metres"><label for="metres">Оптоволокно, м</label><input id="metres" inputmode="decimal"></div>
+    <div id="f-metres"><label for="metres">Оптоволокно, м</label><input id="metres" inputmode="numeric"></div>
     <div id="f-qty"><label for="qty">Количество катушек, шт.</label><input id="qty" inputmode="numeric"></div>
     <div id="f-length"><label for="length">Длина одной катушки, м</label><select id="length"></select></div>
     <div id="f-product"><label for="productLength" id="productLabel">Изделие</label><select id="productLength"></select></div>
@@ -155,7 +155,8 @@ function checkOp(op) {
   if (op.date && op.date < $('date').min && $('date').min === today()) return 'Задним числом документ может провести только администратор.';
   if (!op.date || op.date < $('date').min) return 'Дата — не раньше ' + $('date').min.split('-').reverse().join('.') + '.';
   if (op.date > today()) return 'Дата документа не может быть позже сегодняшней.';
-  if (rule.mode === 'metres' && !(num(op.metres) > 0)) return 'Укажите метры оптоволокна больше нуля.';
+  if (/[.,]/.test((op.metres || '') + (op.qty || ''))) return 'Пишите числа цифрами без точек и запятых, например 10000.';
+  if (rule.mode === 'metres' && !whole(op.metres)) return 'Укажите метры оптоволокна целым числом больше нуля.';
   if (rule.mode !== 'metres' && !whole(op.qty)) return 'Укажите количество катушек целым числом больше нуля.';
   if (rule.mode === 'winding' && !(num(op.length) > 0)) return 'Выберите длину одной катушки из списка.';
   if (rule.product && !(op.productLength > 0)) return 'Выберите ' + (rule.coil ? 'длину катушки' : 'изделие') + ' из списка.';
@@ -256,7 +257,7 @@ let opGroups = [];
 
 function renderOpening(r) {
   $('op-fibre').innerHTML = ''; $('op-groups').innerHTML = ''; opGroups = r.groups;
-  opField($('op-fibre'), 'of', r.fibre.name + ', ' + r.fibre.unit, r.fibre.value, 'decimal');
+  opField($('op-fibre'), 'of', r.fibre.name + ', ' + r.fibre.unit, r.fibre.value, 'numeric');
   r.groups.forEach((g, k) => {
     const head = document.createElement('div'), grid = document.createElement('div'), total = document.createElement('div');
     head.className = 'group'; head.textContent = g + ', шт.'; grid.className = 'grid2'; total.className = 'total'; total.id = 'og-total' + k;
@@ -282,8 +283,9 @@ function recalcOpening() {
 }
 
 function checkOpening(v) {
+  if ([v.fibre].concat(v.products).some(x => /[.,]/.test(x))) return 'Пишите числа цифрами без точек и запятых, например 10000.';
   const bad = (x, whole) => x !== '' && !(num(x) >= 0 && (!whole || Number.isInteger(num(x))));
-  if (bad(v.fibre, false)) return 'Оптоволокно: число от 0 или пусто.';
+  if (bad(v.fibre, true)) return 'Оптоволокно: целое число метров от 0 или пусто.';
   const p = v.products.findIndex(x => bad(x, true));
   if (p >= 0) return opGroups[Math.floor(p / 8)] + ' ' + $('op' + p).previousSibling.textContent + ': целое число от 0 или пусто.';
   return '';
