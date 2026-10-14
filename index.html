@@ -171,6 +171,35 @@ function recalc() {
   } else $('total').textContent = '';
 }
 
+// Операция без ответа сервера (обрыв связи) хранится на телефоне, пока ответ не придёт: если приложение закрыли,
+// при следующем открытии она досылается под тем же номером — дошедшую в прошлый раз сервер не задвоит.
+const PENDING = 'namotka.pending';
+function userId() { return tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? String(tg.initDataUnsafe.user.id) : ''; }
+function savePending(op) { try { localStorage.setItem(PENDING, JSON.stringify({ user: userId(), op })); } catch (e) {} }
+function dropPending() { try { localStorage.removeItem(PENDING); } catch (e) {} }
+function loadPending() {
+  try { const p = JSON.parse(localStorage.getItem(PENDING) || 'null'); return p && p.op && p.user === userId() ? p.op : null; }
+  catch (e) { return null; }
+}
+function opLabel(op) {
+  return op.doc + ' / ' + op.op + ', ' + String(op.date).split('-').reverse().join('.') +
+    (op.metres ? ', ' + op.metres + ' м' : ', ' + op.qty + ' шт.') + (op.length ? ' по ' + op.length + ' м' : '') +
+    (op.productLength ? ', изделие ' + op.productLength + ' м' : '');
+}
+
+async function resendPending() {
+  const op = loadPending(); if (!op) return;
+  show('Досылаю операцию, на которую в прошлый раз не пришёл ответ: ' + opLabel(op) + '…');
+  try {
+    const r = await api({ action: 'post', op });
+    dropPending();
+    if (!r.ok) show('Не проведена операция ' + opLabel(op) + ': ' + r.error, 'bad');
+    else if (r.duplicate) show('Операция ' + opLabel(op) + ' уже была проведена: ' + r.status, 'good');
+    else if (r.status === 'Учтено') show('Дослано и учтено: ' + opLabel(op), 'good');
+    else show('Не проведено: ' + opLabel(op) + '. ' + (r.message || ''), 'bad');
+  } catch (e) { show('Операция ' + opLabel(op) + ' пока не дошла: нет связи. Досылка повторится при следующем открытии.', 'bad'); }
+}
+
 async function send() {
   if (!rule) return;
   const op = { clientId, doc: rule.doc, op: rule.op, date: $('date').value, note: $('note').value.trim() };
@@ -186,15 +215,18 @@ async function send() {
   if (failedSig && failedSig !== sig) { clientId = newId(); op.clientId = clientId; }
   failedSig = null;
   $('send').disabled = true; show('Отправляю…');
+  savePending(op);
   try {
     const r = await api({ action: 'post', op });
-    if (!r.ok) { show(r.needRole ? 'Доступ снят. Обратитесь к владельцу.' : r.error, 'bad'); return; }
+    dropPending();
+    if (!r.ok) { failedSig = sig; show(r.needRole ? 'Доступ снят. Обратитесь к владельцу.' : r.error, 'bad'); return; }
     if (r.duplicate) show('Эта операция уже была проведена: ' + r.status, 'good');
     else if (r.status === 'Учтено') show('Учтено: ' + rule.doc + ' / ' + rule.op + (r.message ? '\n' + r.message : ''), 'good');
     else show('Не проведено. ' + (r.message || ''), 'bad');
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(r.status === 'Учтено' || r.duplicate ? 'success' : 'error');
     clientId = newId();
-    clearFields();
+    // Отказ (не хватает остатка и т. п.) поля не очищает: человек поправит и проведёт снова.
+    if (r.duplicate || r.status === 'Учтено') clearFields();
   } catch (e) {
     // clientId не меняем: повторная отправка тех же чисел не задвоит операцию.
     failedSig = sig;
@@ -355,6 +387,7 @@ async function start() {
     $('date').value = defaultDate();
     $('r-from').value = $('r-to').value = $('date').value;
     $('form').hidden = false; $('tabs').hidden = false;
+    await resendPending();
   } catch (e) { $('who').textContent = 'Нет связи с учётом: ' + e.message; }
 }
 
