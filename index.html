@@ -369,7 +369,32 @@ function renderReport(r) {
     r.lengths.forEach((l, i) => (all || ks.some(k => filled(r.products[k * 8 + i]))) && (b += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => cell(r.products[k * 8 + i])).join('') + '</tr>'));
     b += '</table>';
   });
-  $('r-bal').innerHTML = b + '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.' + (all ? '' : ' Нули и невнесённые скрыты.') + '</div>';
+  b += '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.' + (all ? '' : ' Нули и невнесённые скрыты.') + '</div>';
+  // Движение за период и выпуск за период — отдельные разделы в самом низу (слово владельца 14.10).
+  if (r.movement) {
+    const km = a => a.unit === 'м', put = (a, v) => v === null ? '—' : fmt(km(a) ? v / 1000 : v);
+    b += '<div class="step" style="margin-top:24px">Движение за период</div><table><tr><td class="n sub">Начало</td><td class="n sub">Приход</td><td class="n sub">Расход</td><td class="n sub">Конец</td></tr>';
+    r.assets.forEach((a, i) => {
+      const inc = r.movement.in[i], out = r.movement.out[i];
+      if (!all && !inc && !out) return;
+      // Название — отдельной строкой над числами: в одну строку с ними таблица шире экрана телефона.
+      b += '<tr><td colspan="4" style="border:0;padding-bottom:0">' + esc(a.name) + (km(a) ? ', км' : ', шт.') + '</td></tr><tr><td class="n">' + put(a, a.value === null ? null : a.value - inc + out) + '</td><td class="n">' + put(a, inc) + '</td><td class="n">' + put(a, out) + '</td><td class="n">' + put(a, a.value) + '</td></tr>';
+    });
+    b += '</table>';
+    if (!all && r.assets.every((a, i) => !r.movement.in[i] && !r.movement.out[i])) b += '<div class="total">За период движения нет.</div>';
+  }
+  if (r.output) {
+    const o = r.output, ks = o.ops.map((x, k) => k).filter(k => all || o.qty[k].some(Boolean));
+    b += '<div class="step" style="margin-top:24px">Выпуск за период, шт.</div>';
+    if (!ks.length) b += '<div class="total">За период выпуска нет.</div>';
+    else {
+      b += '<table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(o.ops[k]).replace(/([а-яё]{4})(?=[а-яё]{3})/gi, '$1&shy;') + '</td>').join('') + '</tr>';
+      r.lengths.forEach((l, i) => (all || ks.some(k => o.qty[k][i])) && (b += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => '<td class="n">' + fmt(o.qty[k][i]) + '</td>').join('') + '</tr>'));
+      b += '<tr><td><b>Итого</b></td>' + ks.map(k => '<td class="n"><b>' + fmt(o.qty[k].reduce((x, y) => x + y, 0)) + '</b></td>').join('') + '</tr></table>';
+    }
+    if (all || o.metres) b += '<div class="total">Оптоволокна на намотку и перемотку: ' + fmt(o.metres / 1000) + ' км.</div>';
+  }
+  $('r-bal').innerHTML = b;
 }
 
 async function loadReport() {
