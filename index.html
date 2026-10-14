@@ -126,8 +126,11 @@ async function api(body) {
   return r.json();
 }
 
+// Дата по умолчанию — сегодня (до начала учёта — его первый день); новый документ снова начинается с неё.
+function defaultDate() { return today() < $('date').min ? $('date').min : today(); }
+
 function pickDoc(doc, btn) {
-  rule = null;
+  rule = null; $('date').value = defaultDate();
   document.querySelectorAll('.docs button').forEach(b => b.classList.toggle('on', b === btn));
   $('ops').innerHTML = '';
   rules.filter(x => x.doc === doc).forEach(x => {
@@ -347,7 +350,7 @@ async function start() {
       b.textContent = 'Ввод остатков';
       b.onclick = () => pickOpening(b); $('docs').append(b);
     }
-    $('date').value = today() < $('date').min ? $('date').min : today();
+    $('date').value = defaultDate();
     $('r-from').value = $('r-to').value = $('date').value;
     $('form').hidden = false; $('tabs').hidden = false;
   } catch (e) { $('who').textContent = 'Нет связи с учётом: ' + e.message; }
