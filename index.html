@@ -75,7 +75,7 @@
 const API = 'https://script.google.com/macros/s/AKfycbz-x01FQbjYLgJY9__f5O67K8hzfKtogNAMpotEblh60CQEkMQk1hcVYXdPmlsqIsTF/exec';
 const tg = window.Telegram && Telegram.WebApp;
 const $ = id => document.getElementById(id);
-let rules = [], rule = null, clientId = newId();
+let rules = [], rule = null, clientId = newId(), failedSig = null;
 
 function newId() { return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); }
 function today() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
@@ -97,7 +97,7 @@ function pickDoc(doc, btn) {
     b.textContent = x.op;
     b.onclick = () => pick(x, b); $('ops').append(b);
   });
-  $('opsBox').hidden = false; $('fields').hidden = true; show('');
+  $('opsBox').hidden = false; $('fields').hidden = true; clearFields(); show('');
 }
 
 function pick(r, btn) {
@@ -108,7 +108,19 @@ function pick(r, btn) {
   $('f-qty').hidden = r.mode === 'metres';
   $('f-length').hidden = r.mode !== 'winding';
   $('f-product').hidden = !r.product;
-  recalc(); show('');
+  clearFields(); show('');
+}
+
+function clearFields() { ['metres', 'qty', 'length', 'note'].forEach(id => $(id).value = ''); recalc(); }
+
+// Пустое или нулевое число не отправляем: сервер записал бы его в журнал строкой «Отклонено».
+function checkOp(op) {
+  const whole = v => Number.isInteger(num(v)) && num(v) > 0;
+  if (!op.date || op.date < $('date').min) return 'Дата — не раньше ' + $('date').min.split('-').reverse().join('.') + '.';
+  if (rule.mode === 'metres' && !(num(op.metres) > 0)) return 'Укажите метры оптоволокна больше нуля.';
+  if (rule.mode !== 'metres' && !whole(op.qty)) return 'Укажите количество катушек целым числом больше нуля.';
+  if (rule.mode === 'winding' && !(num(op.length) > 0)) return 'Укажите длину одной катушки больше нуля.';
+  return '';
 }
 
 function recalc() {
@@ -125,6 +137,13 @@ async function send() {
   else op.qty = $('qty').value;
   if (rule.mode === 'winding') op.length = $('length').value;
   if (rule.product) op.productLength = Number($('productLength').value);
+  const bad = checkOp(op);
+  if (bad) { show(bad, 'bad'); return; }
+  // После обрыва связи повтор с теми же числами идёт под прежним номером (дубля не будет),
+  // а с другими числами — это уже новая операция под новым номером.
+  const sig = JSON.stringify(Object.assign({}, op, { clientId: '' }));
+  if (failedSig && failedSig !== sig) { clientId = newId(); op.clientId = clientId; }
+  failedSig = null;
   $('send').disabled = true; show('Отправляю…');
   try {
     const r = await api({ action: 'post', op });
@@ -134,11 +153,11 @@ async function send() {
     else show('Отклонено: ' + (r.message || ''), 'bad');
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(r.status === 'Учтено' || r.duplicate ? 'success' : 'error');
     clientId = newId();
-    ['metres', 'qty', 'length', 'note'].forEach(id => $(id).value = '');
-    recalc();
+    clearFields();
   } catch (e) {
-    // clientId не меняем: повторная отправка не задвоит операцию.
-    show('Нет связи: ' + e.message + '\nМожно нажать «Провести» ещё раз — дубля не будет.', 'bad');
+    // clientId не меняем: повторная отправка тех же чисел не задвоит операцию.
+    failedSig = sig;
+    show('Нет связи: ' + e.message + '\nМожно нажать «Провести» ещё раз — дубля не будет. Если поменяете числа, это будет новая операция.', 'bad');
   } finally { $('send').disabled = false; }
 }
 
@@ -159,7 +178,7 @@ async function start() {
       b.textContent = doc;
       b.onclick = () => pickDoc(doc, b); $('docs').append(b);
     });
-    $('date').value = today();
+    $('date').value = today() < $('date').min ? $('date').min : today();
     $('form').hidden = false;
   } catch (e) { $('who').textContent = 'Нет связи с учётом: ' + e.message; }
 }
