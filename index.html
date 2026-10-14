@@ -52,6 +52,9 @@
   .row { background: var(--card); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
   .row .top { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--hint); }
   .row .what { font-weight: 600; margin: 2px 0; }
+  .jlist { max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .jlist .row { cursor: pointer; }
+  .back { background: none; border: 0; color: var(--accent); font-size: 16px; padding: 4px 0 8px; }
   .ok { color: var(--good); font-weight: 600; }
   .no { color: var(--bad); font-weight: 600; }
   .why { font-size: 14px; color: var(--bad); }
@@ -74,8 +77,18 @@
     <div class="step">Операция</div>
     <div class="ops" id="ops"></div>
   </div>
+  <div id="journalBox" hidden>
+    <button class="send" id="j-new" style="margin-top:0">Добавить</button>
+    <div class="step" style="margin-top:16px" id="j-title">Журнал</div>
+    <div class="jlist" id="j-list"></div>
+  </div>
+  <div id="viewBox" hidden>
+    <button class="back" id="v-back">← Назад к журналу</button>
+    <div id="v-body"></div>
+  </div>
   <div id="fields" hidden>
-    <div class="step">Реквизиты</div>
+    <button class="back" id="f-back">← Назад к журналу</button>
+    <div class="step">Новая операция</div>
     <label for="date">Дата</label>
     <input id="date" type="date" min="2026-10-15">
     <div id="f-metres"><label for="metres">Оптоволокно, м</label><input id="metres" inputmode="numeric"></div>
@@ -139,7 +152,7 @@ function pickDoc(doc, btn) {
     b.textContent = x.op;
     b.onclick = () => pick(x, b); $('ops').append(b);
   });
-  $('opsBox').hidden = false; $('fields').hidden = true; $('openingBox').hidden = true; clearFields(); show('');
+  $('opsBox').hidden = false; $('fields').hidden = true; $('openingBox').hidden = true; hideJournal(); clearFields(); show('');
 }
 
 function pick(r, btn) {
@@ -152,6 +165,45 @@ function pick(r, btn) {
   $('f-product').hidden = !r.product;
   $('productLabel').textContent = r.coil ? 'Длина катушки' : 'Изделие';
   clearFields(); show('');
+  // Выбор операции открывает её журнал; форма — по «Добавить» (слово владельца 14.10).
+  $('fields').hidden = true; showJournal(); loadJournal();
+}
+
+// Журнал вида операций: список свежих сверху, операция открывается для чтения, «Назад» — к списку.
+let journal = [], backFn = null;
+function setBack(fn) {
+  backFn = fn;
+  if (tg && tg.BackButton) { if (fn) tg.BackButton.show(); else tg.BackButton.hide(); }
+}
+function hideJournal() { $('journalBox').hidden = true; $('viewBox').hidden = true; setBack(null); }
+function showJournal() { $('fields').hidden = true; $('viewBox').hidden = true; $('journalBox').hidden = false; setBack(null); }
+function newOp() { $('journalBox').hidden = true; $('viewBox').hidden = true; $('fields').hidden = false; clearFields(); show(''); setBack(showJournal); }
+async function loadJournal() {
+  const r0 = rule;
+  $('j-title').textContent = 'Журнал: ' + r0.doc + ' / ' + r0.op; $('j-list').innerHTML = '<div class="total">Загружаю…</div>';
+  try {
+    const r = await api({ action: 'journal', doc: r0.doc, op: r0.op });
+    if (rule !== r0) return;
+    if (!r.ok) { $('j-list').innerHTML = '<div class="why">' + esc(r.error) + '</div>'; return; }
+    journal = r.ops;
+    $('j-list').innerHTML = journal.length ? journal.map((x, i) => {
+      const good = x.status === 'Учтено', who = x.who.replace(/^Telegram: /, '');
+      return '<div class="row" data-i="' + i + '"><div class="top"><span>' + ruDay(x.day) + (who ? ' · ' + esc(who) : '') + '</span>' +
+        '<span class="' + (good ? 'ok' : 'no') + '">' + esc(x.status) + '</span></div><div class="sub">' + esc(opLine(x)) + '</div></div>';
+    }).join('') : '<div class="total">Операций пока нет.</div>';
+    $('j-list').querySelectorAll('.row').forEach(el => el.onclick = () => openOp(journal[el.dataset.i]));
+  } catch (e) { if (rule === r0) $('j-list').innerHTML = '<div class="why">Нет связи: ' + esc(e.message) + '</div>'; }
+}
+function openOp(x) {
+  const line = (k, v) => v === '' || v === null || v === undefined ? '' : '<tr><td class="sub">' + k + '</td><td>' + esc(v) + '</td></tr>';
+  $('v-body').innerHTML = '<div class="step">' + esc(rule.doc + ' / ' + rule.op) + '</div><table>' +
+    line('Дата', ruDay(x.day)) +
+    line('Количество', has(x.qty) ? fmt(x.qty) + ' шт.' : '') +
+    line(rule.mode === 'winding' || rule.coil ? 'Длина катушки' : 'Изделие', has(x.product) ? fmt(x.product) + ' м' : has(x.length) ? fmt(x.length) + ' м' : '') +
+    line('Оптоволокно', Number(x.metres) ? fmt(x.metres / 1000) + ' км' : '') +
+    line('Примечание', x.note) + line('Статус', x.status) + line('Причина', x.message) +
+    line('Внесено', x.entered) + line('Кто провёл', x.who.replace(/^Telegram: /, '')) + '</table>';
+  $('journalBox').hidden = true; $('viewBox').hidden = false; window.scrollTo(0, 0); setBack(showJournal);
 }
 
 function clearFields() { ['metres', 'qty', 'length', 'productLength', 'note'].forEach(id => $(id).value = ''); recalc(); }
@@ -234,7 +286,7 @@ async function send() {
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(r.status === 'Учтено' || r.duplicate ? 'success' : 'error');
     clientId = newId();
     // Отказ (не хватает остатка и т. п.) поля не очищает: человек поправит и проведёт снова.
-    if (r.duplicate || r.status === 'Учтено') clearFields();
+    if (r.duplicate || r.status === 'Учтено') { clearFields(); showJournal(); loadJournal(); }
   } catch (e) {
     // clientId не меняем: повторная отправка тех же чисел не задвоит операцию.
     failedSig = sig;
@@ -246,7 +298,7 @@ async function send() {
 async function pickOpening(btn) {
   rule = null;
   document.querySelectorAll('.docs button').forEach(b => b.classList.toggle('on', b === btn));
-  $('opsBox').hidden = true; $('fields').hidden = true; $('openingBox').hidden = true; show('Загружаю остатки…');
+  $('opsBox').hidden = true; $('fields').hidden = true; $('openingBox').hidden = true; hideJournal(); show('Загружаю остатки…');
   $('op-date').max = today(); if (!$('op-date').value) $('op-date').value = today();
   try {
     const r = await api({ action: 'opening' });
@@ -325,6 +377,7 @@ function plural(n) { const t = n % 10, h = n % 100; return t === 1 && h !== 11 ?
 function tab(rep) {
   $('tab-docs').classList.toggle('on', !rep); $('tab-rep').classList.toggle('on', rep);
   $('form').hidden = rep; $('repBox').hidden = !rep; show('');
+  setBack(!rep && (!$('fields').hidden || !$('viewBox').hidden) ? showJournal : null);
   if (rep) loadReport();
 }
 
@@ -449,6 +502,9 @@ async function start() {
 
 ['qty', 'length'].forEach(id => $(id).addEventListener('input', recalc));
 $('send').onclick = send;
+$('j-new').onclick = newOp;
+$('v-back').onclick = $('f-back').onclick = showJournal;
+if (tg && tg.BackButton) tg.BackButton.onClick(() => backFn && backFn());
 $('op-save').onclick = saveOpening;
 $('tab-docs').onclick = () => tab(false);
 $('tab-rep').onclick = () => tab(true);
