@@ -102,9 +102,9 @@
     <div><label for="r-from">С</label><input id="r-from" type="date" min="2026-10-15"></div>
     <div><label for="r-to">По</label><input id="r-to" type="date" min="2026-10-15"></div>
   </div>
+  <div id="r-emptyBox" style="margin-top:14px"><label class="check"><input type="checkbox" id="r-empty"> Показывать пустые</label></div>
   <button class="send" id="r-show">Показать</button>
   <div id="r-ops"></div>
-  <div id="r-emptyBox" hidden style="margin-top:20px"><label class="check"><input type="checkbox" id="r-empty"> Показывать пустые</label></div>
   <div id="r-bal"></div>
 </div>
 <div class="msg" id="msg" hidden></div>
@@ -343,7 +343,7 @@ let lastReport = null;
 const openSecs = new Set();
 const sec = (k, title, body) => '<details class="sec" data-k="' + k + '"' + (openSecs.has(k) ? ' open' : '') + '><summary>' + esc(title) + '</summary>' + body + '</details>';
 function renderReport(r) {
-  lastReport = r; $('r-emptyBox').hidden = false;
+  lastReport = r;
   // Пустая позиция — 0 или «не внесён»; без галочки «Показывать пустые» такие строки и колонки скрыты (слово владельца 14.10).
   const all = $('r-empty').checked, filled = v => v !== null && v !== 0;
   const days = {};
