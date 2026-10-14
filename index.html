@@ -76,7 +76,7 @@
     <div id="f-metres"><label for="metres">Оптоволокно, м</label><input id="metres" inputmode="decimal"></div>
     <div id="f-qty"><label for="qty">Количество катушек, шт.</label><input id="qty" inputmode="numeric"></div>
     <div id="f-length"><label for="length">Длина одной катушки, м</label><select id="length"></select></div>
-    <div id="f-product"><label for="productLength">Изделие</label><select id="productLength"></select></div>
+    <div id="f-product"><label for="productLength" id="productLabel">Изделие</label><select id="productLength"></select></div>
     <label for="note">Примечание</label>
     <textarea id="note"></textarea>
     <div class="total" id="total"></div>
@@ -85,13 +85,8 @@
   <div id="openingBox" hidden>
     <div class="step">Остатки на начало учёта</div>
     <div class="total">По физическому пересчёту. Пусто — не посчитано, 0 — нет. В журнал операций не пишется.</div>
-    <div id="op-assets"></div>
-    <div class="group">Готовые изделия, новые, шт.</div>
-    <div class="grid2" id="op-new"></div>
-    <div class="total" id="op-new-total"></div>
-    <div class="group">Готовые изделия после ремонта, шт.</div>
-    <div class="grid2" id="op-rep"></div>
-    <div class="total" id="op-rep-total"></div>
+    <div id="op-fibre"></div>
+    <div id="op-groups"></div>
     <div class="total" id="op-entered"></div>
     <button class="send" id="op-save">Сохранить остатки</button>
   </div>
@@ -148,6 +143,7 @@ function pick(r, btn) {
   $('f-qty').hidden = r.mode === 'metres';
   $('f-length').hidden = r.mode !== 'winding';
   $('f-product').hidden = !r.product;
+  $('productLabel').textContent = r.coil ? 'Длина катушки' : 'Изделие';
   clearFields(); show('');
 }
 
@@ -254,26 +250,30 @@ function opField(box, id, label, value, mode) {
   d.append(l, i); box.append(d);
 }
 
+let opGroups = [];
+
 function renderOpening(r) {
-  $('op-assets').innerHTML = ''; $('op-new').innerHTML = ''; $('op-rep').innerHTML = '';
-  r.assets.forEach((a, i) => opField($('op-assets'), 'oa' + i, a.name + ', ' + a.unit, a.value, i ? 'numeric' : 'decimal'));
-  r.lengths.forEach((l, j) => {
-    opField($('op-new'), 'op' + j, l.toLocaleString('ru-RU') + ' м', r.products[j], 'numeric');
-    opField($('op-rep'), 'op' + (8 + j), l.toLocaleString('ru-RU') + ' м', r.products[8 + j], 'numeric');
+  $('op-fibre').innerHTML = ''; $('op-groups').innerHTML = ''; opGroups = r.groups;
+  opField($('op-fibre'), 'of', r.fibre.name + ', ' + r.fibre.unit, r.fibre.value, 'decimal');
+  r.groups.forEach((g, k) => {
+    const head = document.createElement('div'), grid = document.createElement('div'), total = document.createElement('div');
+    head.className = 'group'; head.textContent = g + ', шт.'; grid.className = 'grid2'; total.className = 'total'; total.id = 'og-total' + k;
+    r.lengths.forEach((l, j) => opField(grid, 'op' + (k * 8 + j), l.toLocaleString('ru-RU') + ' м', r.products[k * 8 + j], 'numeric'));
+    $('op-groups').append(head, grid, total);
   });
   $('op-entered').textContent = r.entered ? 'Последний ввод: ' + r.entered : 'Остатки ещё не вносились.';
   recalcOpening();
 }
 
 function opValues() {
-  return { assets: [0, 1, 2, 3].map(i => $('oa' + i).value.trim()),
-           products: Array.from({ length: 16 }, (_, k) => $('op' + k).value.trim()) };
+  return { fibre: $('of').value.trim(), products: Array.from({ length: opGroups.length * 8 }, (_, k) => $('op' + k).value.trim()) };
 }
 
 function recalcOpening() {
   const v = opValues().products;
-  [['op-new-total', v.slice(0, 8)], ['op-rep-total', v.slice(8)]].forEach(([id, part]) => {
-    $(id).textContent = part.every(x => x !== '' && num(x) >= 0)
+  opGroups.forEach((g, k) => {
+    const part = v.slice(k * 8, k * 8 + 8);
+    $('og-total' + k).textContent = part.every(x => x !== '' && num(x) >= 0)
       ? 'Всего: ' + part.reduce((s, x) => s + num(x), 0).toLocaleString('ru-RU') + ' шт.'
       : 'Всего посчитается, когда заполнены все 8 метражей.';
   });
@@ -281,11 +281,9 @@ function recalcOpening() {
 
 function checkOpening(v) {
   const bad = (x, whole) => x !== '' && !(num(x) >= 0 && (!whole || Number.isInteger(num(x))));
-  const names = ['Оптоволокно', 'Новые катушки: ожидают сборки', 'Ремонт: ожидают перемотки', 'Ремонт: ожидают сборки'];
-  const a = v.assets.findIndex((x, i) => bad(x, i > 0));
-  if (a >= 0) return names[a] + (a ? ': целое число от 0 или пусто.' : ': число от 0 или пусто.');
+  if (bad(v.fibre, false)) return 'Оптоволокно: число от 0 или пусто.';
   const p = v.products.findIndex(x => bad(x, true));
-  if (p >= 0) return (p < 8 ? 'Новые ' : 'После ремонта ') + $('op' + p).previousSibling.textContent + ': целое число от 0 или пусто.';
+  if (p >= 0) return opGroups[Math.floor(p / 8)] + ' ' + $('op' + p).previousSibling.textContent + ': целое число от 0 или пусто.';
   return '';
 }
 
@@ -297,8 +295,8 @@ async function saveOpening() {
     const r = await api({ action: 'saveOpening', values });
     if (!r.ok) { show(r.error, 'bad'); return; }
     renderOpening(r);
-    const filled = values.assets.concat(values.products).filter(x => x !== '').length;
-    show('Остатки сохранены: заполнено ' + filled + ' из 20 позиций.', 'good');
+    const all = [values.fibre].concat(values.products), filled = all.filter(x => x !== '').length;
+    show('Остатки сохранены: заполнено ' + filled + ' из ' + all.length + '.', 'good');
   } catch (e) { show('Нет связи: ' + e.message + '\nМожно нажать «Сохранить» ещё раз.', 'bad'); }
   finally { $('op-save').disabled = false; }
 }
@@ -345,9 +343,14 @@ function renderReport(r) {
   const cell = v => '<td class="n">' + (v === null ? '—' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + '</span>') + '</td>';
   let b = '<div class="step" style="margin-top:20px">Остатки на конец ' + ruDay(r.to) + '</div><table>';
   r.assets.forEach(a => b += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(a.value, a.unit) + '</td></tr>');
-  b += '</table><div class="group">Готовые по метражу, шт.</div><table><tr><td class="sub">Метраж</td><td class="n sub">Новые</td><td class="n sub">После ремонта</td></tr>';
-  r.lengths.forEach((l, i) => b += '<tr><td>' + fmt(l) + ' м</td>' + cell(r.products[i]) + cell(r.products[8 + i]) + '</tr>');
-  $('r-bal').innerHTML = b + '</table><div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.</div>';
+  b += '</table>';
+  // Группы по метражу: готовые изделия (первые две) и катушки до сборки (остальные), по 8 метражей в каждой.
+  [['Готовые по метражу, шт.', [0, 1]], ['Катушки по метражу, шт.', r.groups.map((g, k) => k).slice(2)]].forEach(([title, ks]) => {
+    b += '<div class="group">' + title + '</div><table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(r.groups[k]) + '</td>').join('') + '</tr>';
+    r.lengths.forEach((l, i) => b += '<tr><td>' + fmt(l) + ' м</td>' + ks.map(k => cell(r.products[k * 8 + i])).join('') + '</tr>');
+    b += '</table>';
+  });
+  $('r-bal').innerHTML = b + '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.</div>';
 }
 
 async function loadReport() {
