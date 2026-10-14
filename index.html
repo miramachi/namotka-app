@@ -75,7 +75,7 @@
     <input id="date" type="date" min="2026-10-15">
     <div id="f-metres"><label for="metres">Оптоволокно, м</label><input id="metres" inputmode="decimal"></div>
     <div id="f-qty"><label for="qty">Количество катушек, шт.</label><input id="qty" inputmode="numeric"></div>
-    <div id="f-length"><label for="length">Длина одной катушки, м</label><input id="length" inputmode="decimal" list="lengths"></div>
+    <div id="f-length"><label for="length">Длина одной катушки, м</label><select id="length"></select></div>
     <div id="f-product"><label for="productLength">Изделие</label><select id="productLength"></select></div>
     <label for="note">Примечание</label>
     <textarea id="note"></textarea>
@@ -105,7 +105,6 @@
   <div id="r-ops"></div>
   <div id="r-bal"></div>
 </div>
-<datalist id="lengths"></datalist>
 <div class="msg" id="msg" hidden></div>
 
 <script>
@@ -160,7 +159,7 @@ function checkOp(op) {
   if (!op.date || op.date < $('date').min) return 'Дата — не раньше ' + $('date').min.split('-').reverse().join('.') + '.';
   if (rule.mode === 'metres' && !(num(op.metres) > 0)) return 'Укажите метры оптоволокна больше нуля.';
   if (rule.mode !== 'metres' && !whole(op.qty)) return 'Укажите количество катушек целым числом больше нуля.';
-  if (rule.mode === 'winding' && !(num(op.length) > 0)) return 'Укажите длину одной катушки больше нуля.';
+  if (rule.mode === 'winding' && !(num(op.length) > 0)) return 'Выберите длину одной катушки из списка.';
   return '';
 }
 
@@ -338,7 +337,7 @@ async function start() {
     $('who').textContent = r.name + ' · ' + r.role;
     rules = r.rules;
     $('productLength').innerHTML = r.lengths.map(l => '<option value="' + l + '">Катушка ОВ ' + l.toLocaleString('ru-RU') + ' м</option>').join('');
-    $('lengths').innerHTML = r.lengths.map(l => '<option value="' + l + '">').join('');
+    $('length').innerHTML = '<option value="">— выберите —</option>' + r.lengths.map(l => '<option value="' + l + '">' + l.toLocaleString('ru-RU') + ' м</option>').join('');
     $('docs').innerHTML = '';
     rules.map(x => x.doc).filter((d, i, all) => all.indexOf(d) === i).forEach(doc => {
       const b = document.createElement('button');
