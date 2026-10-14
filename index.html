@@ -151,7 +151,7 @@ function pick(r, btn) {
 
 function clearFields() { ['metres', 'qty', 'length', 'note'].forEach(id => $(id).value = ''); recalc(); }
 
-// Пустое или нулевое число не отправляем: сервер записал бы его в журнал строкой «Отклонено».
+// Пустое или нулевое число не отправляем: сервер всё равно откажет, а человек ждал бы ответа зря.
 function checkOp(op) {
   const whole = v => Number.isInteger(num(v)) && num(v) > 0;
   if (!op.date || op.date < $('date').min) return 'Дата — не раньше ' + $('date').min.split('-').reverse().join('.') + '.';
@@ -188,7 +188,7 @@ async function send() {
     if (!r.ok) { show(r.needRole ? 'Доступ снят. Обратитесь к владельцу.' : r.error, 'bad'); return; }
     if (r.duplicate) show('Эта операция уже была проведена: ' + r.status, 'good');
     else if (r.status === 'Учтено') show('Учтено: ' + rule.doc + ' / ' + rule.op + (r.message ? '\n' + r.message : ''), 'good');
-    else show('Отклонено: ' + (r.message || ''), 'bad');
+    else show('Не проведено. ' + (r.message || ''), 'bad');
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(r.status === 'Учтено' || r.duplicate ? 'success' : 'error');
     clientId = newId();
     clearFields();
