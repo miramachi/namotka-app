@@ -39,6 +39,8 @@
   .msg { margin-top: 14px; padding: 12px; border-radius: 10px; background: var(--card); white-space: pre-wrap; }
   .msg.good { border-left: 4px solid var(--good); }
   .msg.bad { border-left: 4px solid var(--bad); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+  .group { margin-top: 18px; font-weight: 600; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -65,6 +67,19 @@
     <textarea id="note"></textarea>
     <div class="total" id="total"></div>
     <button class="send" id="send">Провести</button>
+  </div>
+  <div id="openingBox" hidden>
+    <div class="step">Остатки на начало учёта</div>
+    <div class="total">По физическому пересчёту. Пусто — не посчитано, 0 — нет. В журнал операций не пишется.</div>
+    <div id="op-assets"></div>
+    <div class="group">Готовые изделия, новые, шт.</div>
+    <div class="grid2" id="op-new"></div>
+    <div class="total" id="op-new-total"></div>
+    <div class="group">Готовые изделия после ремонта, шт.</div>
+    <div class="grid2" id="op-rep"></div>
+    <div class="total" id="op-rep-total"></div>
+    <div class="total" id="op-entered"></div>
+    <button class="send" id="op-save">Сохранить остатки</button>
   </div>
 </div>
 <datalist id="lengths"></datalist>
@@ -97,7 +112,7 @@ function pickDoc(doc, btn) {
     b.textContent = x.op;
     b.onclick = () => pick(x, b); $('ops').append(b);
   });
-  $('opsBox').hidden = false; $('fields').hidden = true; clearFields(); show('');
+  $('opsBox').hidden = false; $('fields').hidden = true; $('openingBox').hidden = true; clearFields(); show('');
 }
 
 function pick(r, btn) {
@@ -161,6 +176,73 @@ async function send() {
   } finally { $('send').disabled = false; }
 }
 
+// Ввод остатков — только у Администратора; пишет лист «Начальные остатки», не журнал.
+async function pickOpening(btn) {
+  rule = null;
+  document.querySelectorAll('.docs button').forEach(b => b.classList.toggle('on', b === btn));
+  $('opsBox').hidden = true; $('fields').hidden = true; $('openingBox').hidden = true; show('Загружаю остатки…');
+  try {
+    const r = await api({ action: 'opening' });
+    if (!r.ok) { show(r.error, 'bad'); return; }
+    renderOpening(r); $('openingBox').hidden = false; show('');
+  } catch (e) { show('Нет связи: ' + e.message, 'bad'); }
+}
+
+function opField(box, id, label, value, mode) {
+  const d = document.createElement('div'), l = document.createElement('label'), i = document.createElement('input');
+  l.htmlFor = id; l.textContent = label; i.id = id; i.inputMode = mode; i.value = value === null ? '' : String(value);
+  d.append(l, i); box.append(d);
+}
+
+function renderOpening(r) {
+  $('op-assets').innerHTML = ''; $('op-new').innerHTML = ''; $('op-rep').innerHTML = '';
+  r.assets.forEach((a, i) => opField($('op-assets'), 'oa' + i, a.name + ', ' + a.unit, a.value, i ? 'numeric' : 'decimal'));
+  r.lengths.forEach((l, j) => {
+    opField($('op-new'), 'op' + j, l.toLocaleString('ru-RU') + ' м', r.products[j], 'numeric');
+    opField($('op-rep'), 'op' + (8 + j), l.toLocaleString('ru-RU') + ' м', r.products[8 + j], 'numeric');
+  });
+  $('op-entered').textContent = r.entered ? 'Последний ввод: ' + r.entered : 'Остатки ещё не вносились.';
+  recalcOpening();
+}
+
+function opValues() {
+  return { assets: [0, 1, 2, 3].map(i => $('oa' + i).value.trim()),
+           products: Array.from({ length: 16 }, (_, k) => $('op' + k).value.trim()) };
+}
+
+function recalcOpening() {
+  const v = opValues().products;
+  [['op-new-total', v.slice(0, 8)], ['op-rep-total', v.slice(8)]].forEach(([id, part]) => {
+    $(id).textContent = part.every(x => x !== '' && num(x) >= 0)
+      ? 'Всего: ' + part.reduce((s, x) => s + num(x), 0).toLocaleString('ru-RU') + ' шт.'
+      : 'Всего посчитается, когда заполнены все 8 метражей.';
+  });
+}
+
+function checkOpening(v) {
+  const bad = (x, whole) => x !== '' && !(num(x) >= 0 && (!whole || Number.isInteger(num(x))));
+  const names = ['Оптоволокно', 'Новые катушки: ожидают сборки', 'Ремонт: ожидают перемотки', 'Ремонт: ожидают сборки'];
+  const a = v.assets.findIndex((x, i) => bad(x, i > 0));
+  if (a >= 0) return names[a] + (a ? ': целое число от 0 или пусто.' : ': число от 0 или пусто.');
+  const p = v.products.findIndex(x => bad(x, true));
+  if (p >= 0) return (p < 8 ? 'Новые ' : 'После ремонта ') + $('op' + p).previousSibling.textContent + ': целое число от 0 или пусто.';
+  return '';
+}
+
+async function saveOpening() {
+  const values = opValues(), bad = checkOpening(values);
+  if (bad) { show(bad, 'bad'); return; }
+  $('op-save').disabled = true; show('Сохраняю…');
+  try {
+    const r = await api({ action: 'saveOpening', values });
+    if (!r.ok) { show(r.error, 'bad'); return; }
+    renderOpening(r);
+    const filled = values.assets.concat(values.products).filter(x => x !== '').length;
+    show('Остатки сохранены: заполнено ' + filled + ' из 20 позиций.', 'good');
+  } catch (e) { show('Нет связи: ' + e.message + '\nМожно нажать «Сохранить» ещё раз.', 'bad'); }
+  finally { $('op-save').disabled = false; }
+}
+
 async function start() {
   if (tg) { tg.ready(); tg.expand(); }
   if (!tg || !tg.initData) { $('who').textContent = 'Откройте приложение из бота в Telegram.'; return; }
@@ -178,6 +260,11 @@ async function start() {
       b.textContent = doc;
       b.onclick = () => pickDoc(doc, b); $('docs').append(b);
     });
+    if (r.opening) {
+      const b = document.createElement('button');
+      b.textContent = 'Ввод остатков';
+      b.onclick = () => pickOpening(b); $('docs').append(b);
+    }
     $('date').value = today() < $('date').min ? $('date').min : today();
     $('form').hidden = false;
   } catch (e) { $('who').textContent = 'Нет связи с учётом: ' + e.message; }
@@ -185,6 +272,8 @@ async function start() {
 
 ['qty', 'length'].forEach(id => $(id).addEventListener('input', recalc));
 $('send').onclick = send;
+$('op-save').onclick = saveOpening;
+$('openingBox').addEventListener('input', recalcOpening);
 start();
 </script>
 </body>
