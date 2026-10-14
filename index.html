@@ -218,6 +218,8 @@ async function send() {
   savePending(op);
   try {
     const r = await api({ action: 'post', op });
+    // Устаревшая сессия: сервер операцию не видел — она остаётся на телефоне и дошлётся после переоткрытия.
+    if (!r.ok && /Сессия устарела/.test(r.error || '')) { failedSig = sig; show(r.error + ' Введённая операция не пропадёт: после открытия она дошлётся сама.', 'bad'); return; }
     dropPending();
     if (!r.ok) { failedSig = sig; show(r.needRole ? 'Доступ снят. Обратитесь к владельцу.' : r.error, 'bad'); return; }
     if (r.duplicate) show('Эта операция уже была проведена: ' + r.status, 'good');
