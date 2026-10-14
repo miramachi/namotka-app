@@ -156,6 +156,7 @@ function clearFields() { ['metres', 'qty', 'length', 'note'].forEach(id => $(id)
 // Пустое или нулевое число не отправляем: сервер всё равно откажет, а человек ждал бы ответа зря.
 function checkOp(op) {
   const whole = v => Number.isInteger(num(v)) && num(v) > 0;
+  if (op.date && op.date < $('date').min && $('date').min === today()) return 'Задним числом документ может провести только администратор.';
   if (!op.date || op.date < $('date').min) return 'Дата — не раньше ' + $('date').min.split('-').reverse().join('.') + '.';
   if (rule.mode === 'metres' && !(num(op.metres) > 0)) return 'Укажите метры оптоволокна больше нуля.';
   if (rule.mode !== 'metres' && !whole(op.qty)) return 'Укажите количество катушек целым числом больше нуля.';
@@ -349,6 +350,8 @@ async function start() {
       b.textContent = 'Ввод остатков';
       b.onclick = () => pickOpening(b); $('docs').append(b);
     }
+    // Задним числом проводит только администратор (сервер проверяет то же самое).
+    if (r.role !== 'Администратор' && today() > $('date').min) $('date').min = today();
     $('date').value = defaultDate();
     $('r-from').value = $('r-to').value = $('date').value;
     $('form').hidden = false; $('tabs').hidden = false;
