@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Намотка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #1b1b1b);
+    --hint: var(--tg-theme-hint-color, #8a8a8a);
+    --card: var(--tg-theme-secondary-bg-color, #f2f2f5);
+    --accent: var(--tg-theme-button-color, #2a7ae2);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --bad: #d93a3a;
+    --good: #1f9d55;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .who { color: var(--hint); font-size: 14px; margin-bottom: 16px; }
+  .ops { display: grid; gap: 8px; margin-bottom: 16px; }
+  .ops button { text-align: left; padding: 12px 14px; border-radius: 10px; border: 2px solid transparent;
+    background: var(--card); color: var(--text); font-size: 16px; }
+  .ops button.on { border-color: var(--accent); }
+  .ops small { display: block; color: var(--hint); font-size: 13px; }
+  label { display: block; margin: 12px 0 4px; font-size: 14px; color: var(--hint); }
+  input, select, textarea { width: 100%; padding: 12px; border-radius: 10px; border: 0;
+    background: var(--card); color: var(--text); font-size: 16px; }
+  textarea { min-height: 60px; resize: vertical; }
+  .total { margin-top: 10px; font-size: 14px; color: var(--hint); }
+  .send { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 10px;
+    background: var(--accent); color: var(--accent-text); font-size: 17px; font-weight: 600; }
+  .send:disabled { opacity: .5; }
+  .msg { margin-top: 14px; padding: 12px; border-radius: 10px; background: var(--card); white-space: pre-wrap; }
+  .msg.good { border-left: 4px solid var(--good); }
+  .msg.bad { border-left: 4px solid var(--bad); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Намотка</h1>
+<div class="who" id="who">Загрузка…</div>
+
+<div id="form" hidden>
+  <div class="ops" id="ops"></div>
+  <div id="fields" hidden>
+    <label for="date">Дата</label>
+    <input id="date" type="date" min="2026-10-15">
+    <div id="f-metres"><label for="metres">Оптоволокно, м</label><input id="metres" inputmode="decimal"></div>
+    <div id="f-qty"><label for="qty">Количество катушек, шт.</label><input id="qty" inputmode="numeric"></div>
+    <div id="f-length"><label for="length">Длина одной катушки, м</label><input id="length" inputmode="decimal" list="lengths"></div>
+    <div id="f-product"><label for="productLength">Изделие</label><select id="productLength"></select></div>
+    <label for="note">Примечание</label>
+    <textarea id="note"></textarea>
+    <div class="total" id="total"></div>
+    <button class="send" id="send">Провести</button>
+  </div>
+</div>
+<datalist id="lengths"></datalist>
+<div class="msg" id="msg" hidden></div>
+
+<script>
+// Адрес веб-приложения Apps Script (…/exec) — подставляется после развёртывания.
+const API = '';
+const tg = window.Telegram && Telegram.WebApp;
+const $ = id => document.getElementById(id);
+let rules = [], rule = null, clientId = newId();
+
+function newId() { return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); }
+function today() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+function show(text, kind) { const m = $('msg'); m.hidden = !text; m.textContent = text || ''; m.className = 'msg ' + (kind || ''); }
+function num(v) { return Number(String(v).replace(/\s/g, '').replace(',', '.')); }
+
+async function api(body) {
+  const r = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ initData: tg ? tg.initData : '' }, body)) });
+  if (!r.ok) throw new Error('Сервер ответил ' + r.status);
+  return r.json();
+}
+
+function pick(r, btn) {
+  rule = r;
+  document.querySelectorAll('.ops button').forEach(b => b.classList.toggle('on', b === btn));
+  $('fields').hidden = false;
+  $('f-metres').hidden = r.mode !== 'metres';
+  $('f-qty').hidden = r.mode === 'metres';
+  $('f-length').hidden = r.mode !== 'winding';
+  $('f-product').hidden = !r.product;
+  recalc(); show('');
+}
+
+function recalc() {
+  if (rule && rule.mode === 'winding') {
+    const m = num($('qty').value) * num($('length').value);
+    $('total').textContent = m > 0 ? 'Спишется оптоволокна: ' + m.toLocaleString('ru-RU') + ' м' : '';
+  } else $('total').textContent = '';
+}
+
+async function send() {
+  if (!rule) return;
+  const op = { clientId, doc: rule.doc, op: rule.op, date: $('date').value, note: $('note').value.trim() };
+  if (rule.mode === 'metres') op.metres = $('metres').value;
+  else op.qty = $('qty').value;
+  if (rule.mode === 'winding') op.length = $('length').value;
+  if (rule.product) op.productLength = Number($('productLength').value);
+  $('send').disabled = true; show('Отправляю…');
+  try {
+    const r = await api({ action: 'post', op });
+    if (!r.ok) { show(r.needRole ? 'Доступ снят. Обратитесь к владельцу.' : r.error, 'bad'); return; }
+    if (r.duplicate) show('Эта операция уже была проведена: ' + r.status, 'good');
+    else if (r.status === 'Учтено') show('Учтено: ' + rule.doc + ' / ' + rule.op + (r.message ? '\n' + r.message : ''), 'good');
+    else show('Отклонено: ' + (r.message || ''), 'bad');
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred(r.status === 'Учтено' || r.duplicate ? 'success' : 'error');
+    clientId = newId();
+    ['metres', 'qty', 'length', 'note'].forEach(id => $(id).value = '');
+    recalc();
+  } catch (e) {
+    // clientId не меняем: повторная отправка не задвоит операцию.
+    show('Нет связи: ' + e.message + '\nМожно нажать «Провести» ещё раз — дубля не будет.', 'bad');
+  } finally { $('send').disabled = false; }
+}
+
+async function start() {
+  if (tg) { tg.ready(); tg.expand(); }
+  if (!tg || !tg.initData) { $('who').textContent = 'Откройте приложение из бота в Telegram.'; return; }
+  try {
+    const r = await api({ action: 'whoami' });
+    if (r.needRole) { $('who').textContent = 'Доступа пока нет. Ваш номер в Telegram: ' + r.id + '. Владелец назначит роль, затем откройте приложение заново.'; return; }
+    if (!r.ok) { $('who').textContent = r.error; return; }
+    $('who').textContent = r.name + ' · ' + r.role;
+    rules = r.rules;
+    $('productLength').innerHTML = r.lengths.map(l => '<option value="' + l + '">Катушка ОВ ' + l.toLocaleString('ru-RU') + ' м</option>').join('');
+    $('lengths').innerHTML = r.lengths.map(l => '<option value="' + l + '">').join('');
+    $('ops').innerHTML = '';
+    rules.forEach(x => {
+      const b = document.createElement('button');
+      b.innerHTML = '<small></small>'; b.firstChild.textContent = x.doc; b.append(x.op);
+      b.onclick = () => pick(x, b); $('ops').append(b);
+    });
+    $('date').value = today();
+    $('form').hidden = false;
+  } catch (e) { $('who').textContent = 'Нет связи с учётом: ' + e.message; }
+}
+
+['qty', 'length'].forEach(id => $(id).addEventListener('input', recalc));
+$('send').onclick = send;
+start();
+</script>
+</body>
+</html>
