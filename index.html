@@ -475,7 +475,7 @@ function renderReport(r) {
     t = stage('Новые: намотка → сборка', 'Намотано', 'Намотано', 1) + stage('Ремонт: перемотка → сборка', 'Перемотка', 'Перемотано', 4) +
       '<div class="total">«Ждут сборки» — сколько намотанных (перемотанных) катушек лежит на конец периода: намотали — прибавилось, собрали в готовое изделие — убавилось.</div>';
     if (all || o.metres) t += '<div class="total">Оптоволокна на намотку и перемотку: ' + fmt(o.metres / 1000) + ' км.</div>';
-    b += sec('out', 'Выпуск за период, шт.', t);
+    b += sec('out', 'Производство за период, шт.', t);
   }
   $('r-bal').innerHTML = b + '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.' + (all ? '' : ' Нули и невнесённые скрыты.') + '</div>';
   document.querySelectorAll('#repBox details.sec').forEach(d => d.ontoggle = () => d.open ? openSecs.add(d.dataset.k) : openSecs.delete(d.dataset.k));
