@@ -445,13 +445,20 @@ function renderReport(r) {
     b += sec('move', 'Движение за период', t);
   }
   if (r.output) {
-    const o = r.output, ks = o.ops.map((x, k) => k).filter(k => all || o.qty[k].some(Boolean));
-    if (!ks.length) t = '<div class="total">За период выпуска нет.</div>';
-    else {
-      t = '<table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(o.ops[k]).replace(/([а-яё]{4})(?=[а-яё]{3})/gi, '$1&shy;') + '</td>').join('') + '</tr>';
-      r.lengths.forEach((l, i) => (all || ks.some(k => o.qty[k][i])) && (t += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => '<td class="n">' + fmt(o.qty[k][i]) + '</td>').join('') + '</tr>'));
-      t += '<tr><td><b>Итого</b></td>' + ks.map(k => '<td class="n"><b>' + fmt(o.qty[k].reduce((x, y) => x + y, 0)) + '</b></td>').join('') + '</tr></table>';
-    }
+    // Выпуск по ступеням: сделано → собрано → ждут сборки на конец периода (слово владельца 15.10).
+    const o = r.output, q = op => o.qty[o.ops.indexOf(op)] || [], cnt = v => v === null ? '—' : fmt(v);
+    const stage = (title, made, madeName, asset) => {
+      const a = q(made), c = q(made === 'Намотано' ? 'Готовое изделие' : 'Перемотка + Готовое изделие'), k = grp(asset);
+      const w = r.lengths.map((l, j) => k >= 0 ? r.products[k * 8 + j] : null), js = r.lengths.map((l, j) => j).filter(j => all || a[j] || c[j] || filled(w[j]));
+      let h = '<div class="step" style="margin-top:12px">' + title + '</div>';
+      if (!js.length) return h + '<div class="total">Нет.</div>';
+      const sum = x => js.reduce((n, j) => n + (x[j] || 0), 0), ws = js.some(j => w[j] !== null) ? sum(w) : null;
+      h += '<table><tr><td class="sub">Метраж</td><td class="n sub">' + madeName + '</td><td class="n sub">Собрано</td><td class="n sub">Ждут сборки</td></tr>';
+      js.forEach(j => h += '<tr><td style="white-space:nowrap">' + fmt(r.lengths[j]) + ' м</td><td class="n">' + fmt(a[j] || 0) + '</td><td class="n">' + fmt(c[j] || 0) + '</td><td class="n"><b>' + cnt(w[j]) + '</b></td></tr>');
+      return h + '<tr><td><b>Итого</b></td><td class="n"><b>' + fmt(sum(a)) + '</b></td><td class="n"><b>' + fmt(sum(c)) + '</b></td><td class="n"><b>' + cnt(ws) + '</b></td></tr></table>';
+    };
+    t = stage('Новые: намотка → сборка', 'Намотано', 'Намотано', 1) + stage('Ремонт: перемотка → сборка', 'Перемотка', 'Перемотано', 4) +
+      '<div class="total">«Ждут сборки» — сколько намотанных (перемотанных) катушек лежит на конец периода: намотали — прибавилось, собрали в готовое изделие — убавилось.</div>';
     if (all || o.metres) t += '<div class="total">Оптоволокна на намотку и перемотку: ' + fmt(o.metres / 1000) + ' км.</div>';
     b += sec('out', 'Выпуск за период, шт.', t);
   }
