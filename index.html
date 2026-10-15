@@ -204,7 +204,7 @@ function openOp(x) {
     line('Примечание', x.note) + line('Статус', x.status) + line('Причина', x.message) +
     line('Внесено', x.entered) + line('Кто провёл', x.who.replace(/^Telegram: /, '')) + '</table>' +
     // Номер документа сервер отдаёт только администратору — у остальных кнопки нет (слово владельца 15.10).
-    (x.id ? '<button id="v-del" style="margin-top:16px;background:#d93025;color:#fff">Удалить документ</button>' : '');
+    (x.id ? '<button class="send" id="v-del" style="margin-top:16px;background:#d93025">Удалить документ</button>' : '');
   if (x.id) $('v-del').onclick = () => {
     const go = async ok => {
       if (!ok) return;
@@ -438,7 +438,7 @@ function renderReport(r) {
     const km = a.unit === 'м' && a.value !== null; t += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>';
     const k = grp(i); if (k >= 0) r.lengths.forEach((l, j) => { const v = r.products[k * 8 + j]; if (all || filled(v)) t += '<tr>' + pad + 'Катушка ОВ ' + fmt(l) + ' м</td><td class="n">' + val(v, 'шт.') + '</td></tr>'; });
   });
-  let b = sec('bal', 'Остатки на конец ' + ruDay(r.to), t + '</table>');
+  let b = sec('bal', 'Склад на конец ' + ruDay(r.to), t + '</table>');
   if (r.movement) {
   // Движение за период и выпуск за период — отдельные разделы в самом низу (слово владельца 14.10).
     const km = a => a.unit === 'м', put = (a, v) => v === null ? '—' : fmt(km(a) ? v / 1000 : v);
