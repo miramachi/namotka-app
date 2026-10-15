@@ -416,7 +416,13 @@ function renderReport(r) {
   const val = (v, unit) => v === null ? '<span class="sub">не внесён</span>' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + ' ' + unit + '</span>';
   let t = '<table>';
   // Оптоволокно показываем в километрах (слово владельца 14.10), вводится по-прежнему в метрах.
-  r.assets.filter(a => all || filled(a.value)).forEach(a => { const km = a.unit === 'м' && a.value !== null; t += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>'; });
+  // Под позицией — её номенклатура по метражам (слово владельца 15.10).
+  const grp = i => (r.byAsset || []).indexOf(i), pad = '<td style="padding-left:18px" class="sub">';
+  r.assets.forEach((a, i) => {
+    if (!all && !filled(a.value)) return;
+    const km = a.unit === 'м' && a.value !== null; t += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>';
+    const k = grp(i); if (k >= 0) r.lengths.forEach((l, j) => { const v = r.products[k * 8 + j]; if (all || filled(v)) t += '<tr>' + pad + 'Катушка ОВ ' + fmt(l) + ' м</td><td class="n">' + val(v, 'шт.') + '</td></tr>'; });
+  });
   let b = sec('bal', 'Остатки на конец ' + ruDay(r.to), t + '</table>');
   if (r.movement) {
   // Движение за период и выпуск за период — отдельные разделы в самом низу (слово владельца 14.10).
@@ -427,6 +433,12 @@ function renderReport(r) {
       if (!all && !inc && !out) return;
       // Название — отдельной строкой над числами: в одну строку с ними таблица шире экрана телефона.
       t += '<tr><td colspan="4" style="border:0;padding-bottom:0">' + esc(a.name) + (km(a) ? ', км' : ', шт.') + '</td></tr><tr><td class="n">' + put(a, a.value === null ? null : a.value - inc + out) + '</td><td class="n">' + put(a, inc) + '</td><td class="n">' + put(a, out) + '</td><td class="n">' + put(a, a.value) + '</td></tr>';
+      const k = grp(i), m = r.movement;
+      if (k >= 0 && m.pin) r.lengths.forEach((l, j) => {
+        const x = k * 8 + j, pi = m.pin[x], po = m.pout[x], v = r.products[x];
+        if (!all && !pi && !po) return;
+        t += '<tr>' + '<td colspan="4" style="border:0;padding:4px 0 0 18px" class="sub">' + 'Катушка ОВ ' + fmt(l) + ' м</td></tr><tr class="sub"><td class="n">' + put(a, v === null ? null : v - pi + po) + '</td><td class="n">' + put(a, pi) + '</td><td class="n">' + put(a, po) + '</td><td class="n">' + put(a, v) + '</td></tr>';
+      });
     });
     t += '</table>';
     if (!all && r.assets.every((a, i) => !r.movement.in[i] && !r.movement.out[i])) t = '<div class="total">За период движения нет.</div>';
