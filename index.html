@@ -414,21 +414,12 @@ function renderReport(r) {
   });
   $('r-ops').innerHTML = sec('ops', 'Операции за период · ' + r.ops.length, h);
   const val = (v, unit) => v === null ? '<span class="sub">не внесён</span>' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + ' ' + unit + '</span>';
-  const cell = v => '<td class="n">' + (v === null ? '—' : '<span class="' + (v < 0 ? 'no' : '') + '">' + fmt(v) + '</span>') + '</td>';
   let t = '<table>';
   // Оптоволокно показываем в километрах (слово владельца 14.10), вводится по-прежнему в метрах.
   r.assets.filter(a => all || filled(a.value)).forEach(a => { const km = a.unit === 'м' && a.value !== null; t += '<tr><td>' + esc(a.name) + '</td><td class="n">' + val(km ? a.value / 1000 : a.value, km ? 'км' : a.unit) + '</td></tr>'; });
   let b = sec('bal', 'Остатки на конец ' + ruDay(r.to), t + '</table>');
-  // Группы по метражу: готовые изделия (первые две) и катушки до сборки (остальные), по 8 метражей в каждой.
-  [['Готовые по метражу, шт.', [0, 1]], ['Катушки по метражу, шт.', r.groups.map((g, k) => k).slice(2)]].forEach(([title, ks], n) => {
-    ks = ks.filter(k => all || r.lengths.some((l, i) => filled(r.products[k * 8 + i])));
-    if (!ks.length) return;
-    t = '<table><tr><td class="sub">Метраж</td>' + ks.map(k => '<td class="n sub">' + esc(r.groups[k]) + '</td>').join('') + '</tr>';
-    r.lengths.forEach((l, i) => (all || ks.some(k => filled(r.products[k * 8 + i]))) && (t += '<tr><td style="white-space:nowrap">' + fmt(l) + ' м</td>' + ks.map(k => cell(r.products[k * 8 + i])).join('') + '</tr>'));
-    b += sec('len' + n, title, t + '</table>');
-  });
-  // Движение за период и выпуск за период — отдельные разделы в самом низу (слово владельца 14.10).
   if (r.movement) {
+  // Движение за период и выпуск за период — отдельные разделы в самом низу (слово владельца 14.10).
     const km = a => a.unit === 'м', put = (a, v) => v === null ? '—' : fmt(km(a) ? v / 1000 : v);
     t = '<table><tr><td class="n sub">Начало</td><td class="n sub">Приход</td><td class="n sub">Расход</td><td class="n sub">Конец</td></tr>';
     r.assets.forEach((a, i) => {
