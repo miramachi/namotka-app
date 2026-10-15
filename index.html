@@ -202,7 +202,22 @@ function openOp(x) {
     line(rule.mode === 'winding' || rule.coil ? 'Длина катушки' : 'Изделие', has(x.product) ? fmt(x.product) + ' м' : has(x.length) ? fmt(x.length) + ' м' : '') +
     line('Оптоволокно', Number(x.metres) ? fmt(x.metres / 1000) + ' км' : '') +
     line('Примечание', x.note) + line('Статус', x.status) + line('Причина', x.message) +
-    line('Внесено', x.entered) + line('Кто провёл', x.who.replace(/^Telegram: /, '')) + '</table>';
+    line('Внесено', x.entered) + line('Кто провёл', x.who.replace(/^Telegram: /, '')) + '</table>' +
+    // Номер документа сервер отдаёт только администратору — у остальных кнопки нет (слово владельца 15.10).
+    (x.id ? '<button id="v-del" style="margin-top:16px;background:#d93025;color:#fff">Удалить документ</button>' : '');
+  if (x.id) $('v-del').onclick = () => {
+    const go = async ok => {
+      if (!ok) return;
+      $('v-del').disabled = true; show('Удаляю…');
+      try {
+        const r = await api({ action: 'deleteOp', id: x.id });
+        if (!r.ok) { show(r.error, 'bad'); $('v-del').disabled = false; return; }
+        show('Документ удалён.', 'good'); showJournal(); loadJournal();
+      } catch (e) { show('Нет связи: ' + e.message, 'bad'); $('v-del').disabled = false; }
+    };
+    const q = 'Удалить документ без возврата? Остатки пересчитаются без него.';
+    if (tg && tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast('6.2')) tg.showConfirm(q, go); else go(confirm(q));
+  };
   $('journalBox').hidden = true; $('viewBox').hidden = false; window.scrollTo(0, 0); setBack(showJournal);
 }
 
