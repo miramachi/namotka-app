@@ -477,6 +477,21 @@ function renderReport(r) {
     if (all || o.metres) t += '<div class="total">Оптоволокна на намотку и перемотку: ' + fmt(o.metres / 1000) + ' км.</div>';
     b += sec('out', 'Производство за период, шт.', t);
   }
+  if (r.writeoff) {
+    // Списание за период: только «Обрыв» и «Неполный остаток» (слово владельца 15.10).
+    const w = r.writeoff, km = v => fmt(v / 1000);
+    if (!w.docs.length && !all) t = '<div class="total">За период списаний нет.</div>';
+    else {
+      t = '<table><tr><td class="sub">Операция</td><td class="n sub">Документов</td><td class="n sub">Оптоволокно, км</td></tr>' +
+        w.ops.map((op, k) => '<tr><td>' + esc(op) + '</td><td class="n">' + fmt(w.count[k]) + '</td><td class="n">' + km(w.metres[k]) + '</td></tr>').join('') +
+        '<tr><td><b>Итого</b></td><td class="n"><b>' + fmt(w.count.reduce((x, y) => x + y, 0)) + '</b></td><td class="n"><b>' + km(w.metres.reduce((x, y) => x + y, 0)) + '</b></td></tr></table>';
+      if (w.docs.length) t += '<div class="step" style="margin-top:12px">По документам</div><table>' + w.docs.map(x => {
+        const sub = [x.who.replace(/^Telegram: /, ''), x.note].filter(Boolean).join(' · ');
+        return '<tr><td>' + ruDay(x.day).slice(0, 5) + ' · ' + esc(x.op) + (sub ? '<div class="sub">' + esc(sub) + '</div>' : '') + '</td><td class="n">' + km(x.metres) + ' км</td></tr>';
+      }).join('') + '</table>';
+    }
+    b += sec('woff', 'Списание за период', t);
+  }
   $('r-bal').innerHTML = b + '<div class="total">По операциям со статусом «Учтено». «—» и «не внесён» — начальный остаток ещё не внесён.' + (all ? '' : ' Нули и невнесённые скрыты.') + '</div>';
   document.querySelectorAll('#repBox details.sec').forEach(d => d.ontoggle = () => d.open ? openSecs.add(d.dataset.k) : openSecs.delete(d.dataset.k));
 }
