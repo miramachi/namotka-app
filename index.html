@@ -481,16 +481,20 @@ function renderReport(r) {
   document.querySelectorAll('#repBox details.sec').forEach(d => d.ontoggle = () => d.open ? openSecs.add(d.dataset.k) : openSecs.delete(d.dataset.k));
 }
 
+let reportSeq = 0;
 async function loadReport() {
   const from = $('r-from').value, to = $('r-to').value;
   if (!from || !to || from > to) { show('Выберите период: дата «с» не позже даты «по».', 'bad'); return; }
-  $('r-show').disabled = true; show('Загружаю…');
+  // Старый отчёт убираем сразу: пока сервер отвечает, на экране не должно быть прошлых чисел; «Показать» не блокируем —
+  // повторное нажатие запускает новый запрос, ответ прежнего отбрасывается (жалоба владельца 15.10).
+  const seq = ++reportSeq; lastReport = null; show('');
+  $('r-ops').innerHTML = '<div class="total">Загружаю…</div>'; $('r-bal').innerHTML = '';
   try {
     const r = await api({ action: 'report', from, to });
-    if (!r.ok) { show(r.error, 'bad'); return; }
-    renderReport(r); show('');
-  } catch (e) { show('Нет связи: ' + e.message, 'bad'); }
-  finally { $('r-show').disabled = false; }
+    if (seq !== reportSeq) return;
+    if (!r.ok) { $('r-ops').innerHTML = ''; show(r.error, 'bad'); return; }
+    renderReport(r);
+  } catch (e) { if (seq === reportSeq) { $('r-ops').innerHTML = ''; show('Нет связи: ' + e.message, 'bad'); } }
 }
 
 async function start() {
